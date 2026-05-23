@@ -90,7 +90,8 @@ const GestionUsuarios = () => {
       handleCloseModal();
       cargarUsuarios();
     } catch (err) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
+      const msg = err.response?.data?.message || err.message;
+      alert(msg.includes('403') ? 'No tienes permisos para esta acción. Inicia sesión como administrador.' : 'Error: ' + msg);
     }
   };
 

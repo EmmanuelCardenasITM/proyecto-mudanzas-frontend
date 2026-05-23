@@ -281,3 +281,146 @@
   color: #808080;
   font-size: 12px;
 }
+
+/* Finanzas */
+.finanzas-descripcion {
+  color: #a0a0a0;
+  font-size: 14px;
+  margin: -10px 0 20px 0;
+  line-height: 1.5;
+}
+
+.finanzas-grid .stat-value-money.neutral {
+  color: #60a5fa;
+}
+
+.stat-value-money.positivo,
+.indicador-valor-money.positivo,
+.resultado-ganancia {
+  color: #4ade80;
+}
+
+.stat-value-money.negativo,
+.indicador-valor-money.negativo,
+.resultado-perdida {
+  color: #f87171;
+}
+
+.stat-card.finanza-cobrado {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, #2d271a 0%, #2d2d2d 100%);
+}
+
+.stat-card.finanza-costo {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #1a1f2d 0%, #2d2d2d 100%);
+}
+
+.stat-card.finanza-ganancia {
+  border-color: #16a34a;
+  background: linear-gradient(135deg, #1a2d1a 0%, #2d2d2d 100%);
+}
+
+.stat-card.finanza-perdida {
+  border-color: #dc2626;
+  background: linear-gradient(135deg, #2d1a1a 0%, #2d2d2d 100%);
+}
+
+.stat-card.finanza-pendiente {
+  border-color: #f97316;
+  background: linear-gradient(135deg, #2d221a 0%, #2d2d2d 100%);
+}
+
+.finanzas-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.finanza-resumen-item {
+  background: #252525;
+  border: 1px solid #3d3d3d;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.finanza-resumen-item span {
+  color: #a0a0a0;
+  font-size: 13px;
+}
+
+.finanza-resumen-item strong {
+  color: #e0e0e0;
+  font-size: 18px;
+}
+
+.finanza-resumen-item strong.positivo {
+  color: #4ade80;
+}
+
+.finanza-resumen-item strong.negativo {
+  color: #f87171;
+}
+
+.finanza-resumen-item strong.neutral {
+  color: #fbbf24;
+}
+
+.resultado-sobrante {
+  color: #fbbf24;
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.finanzas-tabla-container {
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  border-radius: 10px;
+  padding: 20px;
+  overflow-x: auto;
+}
+
+.finanzas-tabla-container h4 {
+  color: #e0e0e0;
+  margin: 0 0 15px 0;
+  font-size: 16px;
+}
+
+.finanzas-tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.finanzas-tabla th,
+.finanzas-tabla td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #3d3d3d;
+}
+
+.finanzas-tabla th {
+  color: #a0a0a0;
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.finanzas-tabla td {
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.finanzas-tabla tbody tr:hover {
+  background: #353535;
+}
+
+.resultado-etiqueta {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 2px;
+}

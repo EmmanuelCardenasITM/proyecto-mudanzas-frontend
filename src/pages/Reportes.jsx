@@ -21,10 +21,134 @@ const Reportes = () => {
     ingresosTotales: 0,
   });
 
+  const [finanzas, setFinanzas] = useState({
+    totalCobrado: 0,
+    valorServiciosPagados: 0,
+    gananciaNeta: 0,
+    totalSobrante: 0,
+    saldoPendiente: 0,
+    valorTotalServicios: 0,
+    margenGanancia: 0,
+    serviciosPagadosCompletos: 0,
+    serviciosConSobrante: 0,
+    serviciosConDeuda: 0,
+    detalleServicios: [],
+  });
+
   useEffect(() => {
-    console.log('Reportes component mounted - cargando estadísticas...');
     cargarEstadisticas();
   }, []);
+
+  const obtenerCostoServicio = (servicio) =>
+    parseFloat(servicio?.costo_total ?? servicio?.costo_base ?? 0) || 0;
+
+  const esServicioCancelado = (servicio) =>
+    (servicio?.estado || '').toLowerCase() === 'cancelado';
+
+  const calcularFinanzas = (servicios, pagos) => {
+    const serviciosMap = Object.fromEntries(servicios.map((s) => [String(s.id), s]));
+
+    const pagosPorServicio = pagos.reduce((acc, pago) => {
+      const servicioId = String(pago.servicio_id);
+      const servicio = serviciosMap[servicioId];
+      const costo =
+        parseFloat(pago.costo_total) ||
+        obtenerCostoServicio(servicio);
+
+      if (!acc[servicioId]) {
+        acc[servicioId] = {
+          servicioId,
+          etiqueta: servicio
+            ? `${servicio.ciudad_origen || '?'} → ${servicio.ciudad_destino || '?'}`
+            : `Servicio #${servicioId}`,
+          costo,
+          totalPagado: 0,
+        };
+      }
+
+      acc[servicioId].totalPagado += parseFloat(pago.monto) || 0;
+      return acc;
+    }, {});
+
+    const totalCobrado = pagos.reduce(
+      (sum, pago) => sum + (parseFloat(pago.monto) || 0),
+      0
+    );
+
+    const detalleServicios = Object.values(pagosPorServicio).map((item) => {
+      const ganancia = Math.min(item.totalPagado, item.costo);
+      const sobrante = Math.max(0, item.totalPagado - item.costo);
+      const faltaPorCobrar = Math.max(0, item.costo - item.totalPagado);
+
+      return {
+        ...item,
+        ganancia,
+        sobrante,
+        faltaPorCobrar,
+      };
+    });
+
+    const valorServiciosPagados = detalleServicios.reduce(
+      (sum, item) => sum + item.costo,
+      0
+    );
+
+    const gananciaNeta = detalleServicios.reduce(
+      (sum, item) => sum + item.ganancia,
+      0
+    );
+
+    const totalSobrante = detalleServicios.reduce(
+      (sum, item) => sum + item.sobrante,
+      0
+    );
+
+    let saldoPendiente = 0;
+    let serviciosPagadosCompletos = 0;
+    let serviciosConSobrante = 0;
+    let serviciosConDeuda = 0;
+
+    detalleServicios.forEach((item) => {
+      if (item.totalPagado >= item.costo) serviciosPagadosCompletos += 1;
+      if (item.sobrante > 0) serviciosConSobrante += 1;
+    });
+
+    servicios.forEach((servicio) => {
+      if (esServicioCancelado(servicio)) return;
+
+      const costo = obtenerCostoServicio(servicio);
+      const pagado = pagosPorServicio[String(servicio.id)]?.totalPagado || 0;
+
+      if (pagado < costo) {
+        serviciosConDeuda += 1;
+        saldoPendiente += costo - pagado;
+      }
+    });
+
+    const valorTotalServicios = servicios.reduce(
+      (sum, servicio) => sum + obtenerCostoServicio(servicio),
+      0
+    );
+
+    const margenGanancia =
+      valorServiciosPagados > 0
+        ? (gananciaNeta / valorServiciosPagados) * 100
+        : 0;
+
+    return {
+      totalCobrado,
+      valorServiciosPagados,
+      gananciaNeta,
+      totalSobrante,
+      saldoPendiente,
+      valorTotalServicios,
+      margenGanancia,
+      serviciosPagadosCompletos,
+      serviciosConSobrante,
+      serviciosConDeuda,
+      detalleServicios,
+    };
+  };
 
   const cargarEstadisticas = async () => {
     try {
@@ -46,18 +170,15 @@ const Reportes = () => {
       // Calcular estadísticas de servicios
       const serviciosPorEstado = servicios.reduce((acc, servicio) => {
         const estado = (servicio.estado || 'pendiente').toLowerCase();
-        console.log(`Servicio ID ${servicio.id}: estado = "${servicio.estado}" -> normalizado = "${estado}"`);
         acc[estado] = (acc[estado] || 0) + 1;
         return acc;
       }, {});
 
-      console.log('Servicios cargados:', servicios);
-      console.log('Servicios por estado:', serviciosPorEstado);
-
-      // Calcular ingresos totales
       const ingresosTotales = pagos.reduce((total, pago) => {
         return total + (parseFloat(pago.monto) || 0);
       }, 0);
+
+      setFinanzas(calcularFinanzas(servicios, pagos));
 
       // Contar vehículos disponibles
       const vehiculosDisponibles = vehiculos.filter(v => v.disponible === true).length;
@@ -149,12 +270,132 @@ const Reportes = () => {
           <div className="stat-card warning">
             <div className="stat-icon">💰</div>
             <div className="stat-content">
-              <div className="stat-label">Ingresos Totales</div>
+              <div className="stat-label">Total Cobrado</div>
               <div className="stat-value-money">{formatCurrency(estadisticas.ingresosTotales)}</div>
               <div className="stat-sublabel">{estadisticas.totalPagos} pagos registrados</div>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Finanzas */}
+      <div className="seccion">
+        <h3>💵 Finanzas del Sistema</h3>
+        <p className="finanzas-descripcion">
+          La ganancia de cada servicio es como máximo su costo. Si el cliente paga de más,
+          el excedente no cuenta como ganancia (es cambio a devolver).
+        </p>
+        <div className="cards-grid finanzas-grid">
+          <div className="stat-card finanza-cobrado">
+            <div className="stat-icon">💳</div>
+            <div className="stat-content">
+              <div className="stat-label">Total Cobrado</div>
+              <div className="stat-value-money">{formatCurrency(finanzas.totalCobrado)}</div>
+              <div className="stat-sublabel">Suma de todos los pagos</div>
+            </div>
+          </div>
+
+          <div className="stat-card finanza-costo">
+            <div className="stat-icon">📋</div>
+            <div className="stat-content">
+              <div className="stat-label">Costo de Servicios Pagados</div>
+              <div className="stat-value-money neutral">
+                {formatCurrency(finanzas.valorServiciosPagados)}
+              </div>
+              <div className="stat-sublabel">Valor según tarifas del sistema</div>
+            </div>
+          </div>
+
+          <div className={`stat-card ${finanzas.gananciaNeta >= 0 ? 'finanza-ganancia' : 'finanza-perdida'}`}>
+            <div className="stat-icon">{finanzas.gananciaNeta >= 0 ? '📈' : '📉'}</div>
+            <div className="stat-content">
+              <div className="stat-label">Ganancia Neta</div>
+              <div className={`stat-value-money ${finanzas.gananciaNeta >= 0 ? 'positivo' : 'negativo'}`}>
+                {formatCurrency(finanzas.gananciaNeta)}
+              </div>
+              <div className="stat-sublabel">
+                Ingreso real reconocido (máx. el costo de cada servicio)
+              </div>
+            </div>
+          </div>
+
+          <div className="stat-card finanza-pendiente">
+            <div className="stat-icon">⚠️</div>
+            <div className="stat-content">
+              <div className="stat-label">Por Cobrar</div>
+              <div className="stat-value-money negativo">
+                {formatCurrency(finanzas.saldoPendiente)}
+              </div>
+              <div className="stat-sublabel">
+                {finanzas.serviciosConDeuda} servicio(s) con pago incompleto
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="finanzas-resumen">
+          <div className="finanza-resumen-item">
+            <span>Valor total de todos los servicios</span>
+            <strong>{formatCurrency(finanzas.valorTotalServicios)}</strong>
+          </div>
+          <div className="finanza-resumen-item">
+            <span>Margen sobre servicios pagados</span>
+            <strong className={finanzas.margenGanancia >= 0 ? 'positivo' : 'negativo'}>
+              {finanzas.margenGanancia.toFixed(1)}%
+            </strong>
+          </div>
+          <div className="finanza-resumen-item">
+            <span>Sobrante en pagos (cambio a devolver)</span>
+            <strong className="neutral">{formatCurrency(finanzas.totalSobrante)}</strong>
+          </div>
+          <div className="finanza-resumen-item">
+            <span>Servicios con pago en exceso</span>
+            <strong>{finanzas.serviciosConSobrante}</strong>
+          </div>
+        </div>
+
+        {finanzas.detalleServicios.length > 0 && (
+          <div className="finanzas-tabla-container">
+            <h4>Detalle por servicio con pagos</h4>
+            <table className="finanzas-tabla">
+              <thead>
+                <tr>
+                  <th>Servicio</th>
+                  <th>Costo</th>
+                  <th>Cobrado</th>
+                  <th>Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {finanzas.detalleServicios.map((item) => (
+                  <tr key={item.servicioId}>
+                    <td>{item.etiqueta}</td>
+                    <td>{formatCurrency(item.costo)}</td>
+                    <td>{formatCurrency(item.totalPagado)}</td>
+                    <td>
+                      <div className={item.ganancia > 0 ? 'resultado-ganancia' : ''}>
+                        {formatCurrency(item.ganancia)}
+                        <span className="resultado-etiqueta"> ganancia</span>
+                      </div>
+                      {item.sobrante > 0 && (
+                        <div className="resultado-sobrante">
+                          {formatCurrency(item.sobrante)}
+                          <span className="resultado-etiqueta"> cambio a devolver</span>
+                        </div>
+                      )}
+                      {item.faltaPorCobrar > 0 && (
+                        <div className="resultado-perdida">
+                          −{formatCurrency(item.faltaPorCobrar)}
+                          <span className="resultado-etiqueta"> falta por cobrar</span>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Estado de Servicios */}
@@ -246,12 +487,16 @@ const Reportes = () => {
           </div>
 
           <div className="indicador-card">
-            <div className="indicador-label">Ingreso Promedio por Pago</div>
-            <div className="indicador-valor-money">
-              {formatCurrency(estadisticas.totalPagos > 0 ? estadisticas.ingresosTotales / estadisticas.totalPagos : 0)}
+            <div className="indicador-label">Ganancia Promedio por Servicio</div>
+            <div className={`indicador-valor-money ${finanzas.gananciaNeta >= 0 ? '' : 'negativo'}`}>
+              {formatCurrency(
+                finanzas.detalleServicios.length > 0
+                  ? finanzas.gananciaNeta / finanzas.detalleServicios.length
+                  : 0
+              )}
             </div>
             <div className="indicador-descripcion">
-              Basado en {estadisticas.totalPagos} pagos
+              {finanzas.detalleServicios.length} servicio(s) con pagos
             </div>
           </div>
 
