@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { servicioService } from '../services/servicioService';
 import { clienteService } from '../services/clienteService';
 import { tarifaService } from '../services/tarifaService';
+import { vehiculoService } from '../services/vehiculoService';
 import './GestionServicios.css';
 
 const GestionServicios = () => {
   const [servicios, setServicios] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [vehiculos, setVehiculos] = useState([]);
   const [tarifas, setTarifas] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,6 +58,16 @@ const GestionServicios = () => {
         console.error('Error al cargar tarifas:', err);
         setTarifas(null);
       }
+
+      // Cargar vehículos
+      try {
+        const vehiculosData = await vehiculoService.getAll();
+        console.log('Vehículos cargados:', vehiculosData);
+        setVehiculos(Array.isArray(vehiculosData) ? vehiculosData : []);
+      } catch (err) {
+        console.error('Error al cargar vehículos:', err);
+        setVehiculos([]);
+      }
       
       // Luego cargar servicios
       try {
@@ -94,6 +106,15 @@ const GestionServicios = () => {
         descripcion_carga: servicio.descripcion_carga || '',
         notas: servicio.notas || '',
       };
+      if (newFormData.vehiculo_id) {
+        const vehiculo = vehiculos.find(
+          (v) => String(v.id) === String(newFormData.vehiculo_id)
+        );
+        const peso = parseFloat(newFormData.peso_carga_kg) || 0;
+        if (vehiculo && peso > 0 && peso > (parseFloat(vehiculo.capacidad_kg) || 0)) {
+          newFormData.vehiculo_id = '';
+        }
+      }
       setFormData(newFormData);
       calcularCostoDesdeBackend(newFormData);
     } else {
@@ -124,10 +145,34 @@ const GestionServicios = () => {
   };
 
   const handleChange = (e) => {
-    const newFormData = {
+    let newFormData = {
       ...formData,
       [e.target.name]: e.target.value,
     };
+
+    if (e.target.name === 'peso_carga_kg' && newFormData.vehiculo_id) {
+      const vehiculo = vehiculos.find(
+        (v) => String(v.id) === String(newFormData.vehiculo_id)
+      );
+      const peso = parseFloat(newFormData.peso_carga_kg) || 0;
+      if (vehiculo && peso > 0 && !vehiculoSoportaCarga(vehiculo, peso)) {
+        newFormData.vehiculo_id = '';
+      }
+    }
+
+    if (e.target.name === 'vehiculo_id' && newFormData.vehiculo_id) {
+      const vehiculo = vehiculos.find(
+        (v) => String(v.id) === String(newFormData.vehiculo_id)
+      );
+      const peso = parseFloat(newFormData.peso_carga_kg) || 0;
+      if (vehiculo && peso > 0 && !vehiculoSoportaCarga(vehiculo, peso)) {
+        alert(
+          `El vehículo ${vehiculo.placa} soporta máximo ${getCapacidadVehiculo(vehiculo).toLocaleString('es-CO')} kg.`
+        );
+        newFormData.vehiculo_id = '';
+      }
+    }
+
     setFormData(newFormData);
     
     // Calcular costo automáticamente cuando cambien distancia o peso
@@ -214,6 +259,12 @@ const GestionServicios = () => {
       }
       if (peso > 50000) {
         alert('El peso de la carga no puede ser mayor a 50,000 kg');
+        return;
+      }
+
+      const errorCapacidad = validarCapacidadVehiculo(formData);
+      if (errorCapacidad) {
+        alert(errorCapacidad);
         return;
       }
 
@@ -321,6 +372,85 @@ const GestionServicios = () => {
     }
   };
 
+  const getPesoCarga = (data = formData) => parseFloat(data.peso_carga_kg) || 0;
+
+  const getCapacidadVehiculo = (vehiculo) =>
+    parseFloat(vehiculo?.capacidad_kg) || 0;
+
+  const vehiculoSoportaCarga = (vehiculo, peso) => {
+    if (!vehiculo || peso <= 0) return true;
+    return peso <= getCapacidadVehiculo(vehiculo);
+  };
+
+  const getVehiculoSeleccionado = (data = formData) =>
+    vehiculos.find((v) => String(v.id) === String(data.vehiculo_id));
+
+  const validarCapacidadVehiculo = (data = formData) => {
+    const peso = getPesoCarga(data);
+    const vehiculo = getVehiculoSeleccionado(data);
+    if (!vehiculo || peso <= 0) return null;
+
+    const capacidad = getCapacidadVehiculo(vehiculo);
+    if (peso > capacidad) {
+      return `La carga (${peso.toLocaleString('es-CO')} kg) supera la capacidad del vehículo ${vehiculo.placa} (${capacidad.toLocaleString('es-CO')} kg). Elija un vehículo con mayor capacidad o reduzca el peso.`;
+    }
+    return null;
+  };
+
+  const getMaxCapacidadDisponible = () => {
+    const disponibles = vehiculos.filter((v) => v.disponible !== false);
+    if (disponibles.length === 0) return 0;
+    return Math.max(...disponibles.map(getCapacidadVehiculo));
+  };
+
+  const formatTipoVehiculo = (tipo) => {
+    if (!tipo) return 'Sin tipo';
+    return tipo.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  const getEtiquetaVehiculo = (vehiculo) => {
+    if (!vehiculo) return 'N/A';
+    const capacidad = vehiculo.capacidad_kg
+      ? ` · ${vehiculo.capacidad_kg} kg`
+      : '';
+    return `${vehiculo.placa} — ${formatTipoVehiculo(vehiculo.tipo)}${capacidad}`;
+  };
+
+  const getVehiculosParaSelect = (data = formData) => {
+    const peso = getPesoCarga(data);
+    let lista = vehiculos.filter((v) => v.disponible !== false);
+
+    if (peso > 0) {
+      lista = lista.filter((v) => vehiculoSoportaCarga(v, peso));
+    }
+
+    const idAsignado = data.vehiculo_id || editingServicio?.vehiculo_id;
+    if (idAsignado) {
+      const asignado = vehiculos.find((v) => String(v.id) === String(idAsignado));
+      if (asignado && !lista.some((v) => v.id === asignado.id)) {
+        const incluirPorEdicion =
+          asignado.disponible === false &&
+          (peso <= 0 || vehiculoSoportaCarga(asignado, peso));
+        if (incluirPorEdicion) {
+          lista = [...lista, asignado];
+        }
+      }
+    }
+
+    return lista;
+  };
+
+  const getNombreVehiculoServicio = (servicio) => {
+    if (servicio.vehiculo_placa) {
+      return servicio.vehiculo_tipo
+        ? `${servicio.vehiculo_placa} (${formatTipoVehiculo(servicio.vehiculo_tipo)})`
+        : servicio.vehiculo_placa;
+    }
+
+    const vehiculo = vehiculos.find((v) => v.id === servicio.vehiculo_id);
+    return vehiculo ? getEtiquetaVehiculo(vehiculo) : 'Sin asignar';
+  };
+
   const getEstadoBadgeClass = (estado) => {
     const estadoLower = estado?.toLowerCase() || 'pendiente';
     const estados = {
@@ -337,6 +467,13 @@ const GestionServicios = () => {
   if (loading) {
     return <div className="loading">Cargando servicios...</div>;
   }
+
+  const pesoCarga = getPesoCarga();
+  const vehiculoSeleccionado = getVehiculoSeleccionado();
+  const capacidadVehiculoSeleccionado = getCapacidadVehiculo(vehiculoSeleccionado);
+  const vehiculosCompatibles = getVehiculosParaSelect();
+  const errorCapacidad = validarCapacidadVehiculo();
+  const maxCapacidadDisponible = getMaxCapacidadDisponible();
 
   return (
     <div className="gestion-servicios">
@@ -359,6 +496,7 @@ const GestionServicios = () => {
               <th>Destino</th>
               <th>Fecha</th>
               <th>Hora</th>
+              <th>Vehículo</th>
               <th>Costo</th>
               <th>Estado</th>
               <th>Acciones</th>
@@ -367,7 +505,7 @@ const GestionServicios = () => {
           <tbody>
             {servicios.length === 0 ? (
               <tr>
-                <td colSpan="9" style={{ textAlign: 'center' }}>No hay servicios registrados</td>
+                <td colSpan="10" style={{ textAlign: 'center' }}>No hay servicios registrados</td>
               </tr>
             ) : (
               servicios.map((servicio) => {
@@ -396,6 +534,7 @@ const GestionServicios = () => {
                     </td>
                     <td>{servicio.fecha_servicio || servicio.fechaServicio || 'N/A'}</td>
                     <td>{servicio.hora_servicio || '-'}</td>
+                    <td className="vehiculo-cell">{getNombreVehiculoServicio(servicio)}</td>
                     <td className="costo-cell">
                       {new Intl.NumberFormat('es-CO', {
                         style: 'currency',
@@ -577,13 +716,55 @@ const GestionServicios = () => {
                     type="number"
                     step="0.1"
                     min="0.1"
-                    max="50000"
+                    max={vehiculoSeleccionado ? capacidadVehiculoSeleccionado : 50000}
                     name="peso_carga_kg"
                     value={formData.peso_carga_kg}
                     onChange={handleChange}
                     required
+                    className={errorCapacidad ? 'input-error' : ''}
                   />
+                  {vehiculoSeleccionado && (
+                    <small className="form-hint">
+                      Máximo para {vehiculoSeleccionado.placa}: {capacidadVehiculoSeleccionado.toLocaleString('es-CO')} kg
+                    </small>
+                  )}
+                  {pesoCarga > 0 && !vehiculoSeleccionado && vehiculosCompatibles.length === 0 && maxCapacidadDisponible > 0 && (
+                    <small className="capacidad-alerta">
+                      Ningún vehículo disponible soporta {pesoCarga.toLocaleString('es-CO')} kg. Capacidad máxima en flota: {maxCapacidadDisponible.toLocaleString('es-CO')} kg.
+                    </small>
+                  )}
                 </div>
+              </div>
+
+              <div className="form-group vehiculo-asignacion">
+                <label>Vehículo asignado</label>
+                <select
+                  name="vehiculo_id"
+                  value={formData.vehiculo_id}
+                  onChange={handleChange}
+                  className={errorCapacidad ? 'input-error' : ''}
+                  disabled={pesoCarga > 0 && vehiculosCompatibles.length === 0}
+                >
+                  <option value="">
+                    {pesoCarga > 0 && vehiculosCompatibles.length === 0
+                      ? 'Sin vehículos compatibles para esta carga'
+                      : 'Sin asignar (se puede asignar después)'}
+                  </option>
+                  {vehiculosCompatibles.map((vehiculo) => (
+                    <option key={vehiculo.id} value={vehiculo.id}>
+                      {getEtiquetaVehiculo(vehiculo)}
+                      {vehiculo.disponible === false ? ' — No disponible' : ''}
+                    </option>
+                  ))}
+                </select>
+                <small className="form-hint">
+                  {pesoCarga > 0
+                    ? `Solo se listan vehículos con capacidad ≥ ${pesoCarga.toLocaleString('es-CO')} kg.`
+                    : 'Indique el peso de la carga para filtrar vehículos compatibles.'}
+                </small>
+                {errorCapacidad && (
+                  <small className="capacidad-alerta">{errorCapacidad}</small>
+                )}
               </div>
 
               <div className="form-group">

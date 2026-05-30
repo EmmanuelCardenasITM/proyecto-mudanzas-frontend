@@ -103,6 +103,33 @@
   font-size: 15px;
 }
 
+.vehiculo-cell {
+  font-size: 13px;
+  color: #93c5fd;
+  max-width: 180px;
+}
+
+.vehiculo-asignacion .form-hint {
+  display: block;
+  margin-top: 6px;
+  color: #808080;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.input-error {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.35);
+}
+
+.capacidad-alerta {
+  display: block;
+  margin-top: 6px;
+  color: #f87171;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .badge {
   padding: 5px 12px;
   border-radius: 20px;
